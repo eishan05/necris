@@ -1,0 +1,13 @@
+[Unit]
+Description=File Server
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/<user-name>/fileserver
+ExecStart=/usr/bin/python3 /home/<user-name>/fileserver/server.py
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
