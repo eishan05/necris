@@ -40,15 +40,129 @@ class USBMonitor:
         
         # Keep track of mounted devices
         self.mounted_devices = set()
-        self.update_mounted_devices()
+        self.validate_existing_mounts()
+
+    def validate_existing_mounts(self):
+        """Validate existing mounts and clean up stale ones"""
+        self.logger.info("Validating existing mounts...")
+        partitions = psutil.disk_partitions(all=True)
+        
+        for partition in partitions:
+            device_path = partition.device
+            mount_point = partition.mountpoint
+            
+            # Check if this is one of our managed mount points
+            if not str(mount_point).startswith(str(self.mount_base)):
+                continue
+                
+            try:
+                # Check if the device actually exists
+                if not os.path.exists(device_path):
+                    self.logger.warning(f"Found stale mount for missing device {device_path}")
+                    try:
+                        # Check if the mount point is actually mounted
+                        if os.path.ismount(mount_point):
+                            # Check if mount point is busy
+                            lsof_check = subprocess.run(['lsof', mount_point], capture_output=True)
+                            if lsof_check.returncode == 0:
+                                self.logger.warning(f"Mount point {mount_point} is busy. Attempting lazy unmount...")
+                                # Try lazy unmount
+                                subprocess.run(['umount', '-l', mount_point], check=True, capture_output=True)
+                            else:
+                                # Regular force unmount
+                                subprocess.run(['umount', '-f', mount_point], check=True, capture_output=True)
+                            
+                            self.logger.info(f"Successfully unmounted stale mount point {mount_point}")
+                        else:
+                            self.logger.info(f"Mount point {mount_point} is not actually mounted")
+                        
+                        # Clean up the mount point directory
+                        mount_dir = Path(mount_point)
+                        if mount_dir.exists():
+                            # Check if directory is empty
+                            if not os.listdir(mount_dir):
+                                mount_dir.rmdir()
+                                self.logger.info(f"Removed stale mount point directory {mount_point}")
+                            else:
+                                self.logger.warning(f"Mount point directory {mount_point} not empty, skipping removal")
+                    except (subprocess.CalledProcessError, OSError) as e:
+                        self.logger.error(f"Failed to clean up stale mount point {mount_point}: {e}")
+                        # Could potentially add a notification here for manual intervention
+                else:
+                    # Device exists, verify it's actually a USB device
+                    context = pyudev.Context()
+                    device = pyudev.Devices.from_device_file(context, device_path)
+                    
+                    if self.is_usb_device(device):
+                        self.logger.info(f"Validated existing USB mount: {device_path}")
+                        self.mounted_devices.add(device_path)
+                    else:
+                        self.logger.warning(f"Found non-USB device mount in USB mount directory: {device_path}")
+                        
+            except Exception as e:
+                self.logger.error(f"Error validating mount {mount_point}: {e}")
+
+    def unmount_device(self, device_path):
+        """Unmount the device with improved error handling"""
+        device_name = os.path.basename(device_path)
+        mount_point = self.mount_base / device_name
+
+        try:
+            # First check if it's actually mounted
+            if not os.path.ismount(str(mount_point)):
+                self.logger.info(f"Device {device_path} is not mounted at {mount_point}")
+                # Clean up mount point if it exists but isn't mounted
+                if mount_point.exists():
+                    if not os.listdir(mount_point):  # Only if empty
+                        mount_point.rmdir()
+                return True
+
+            # Check if mount point is busy
+            lsof_check = subprocess.run(['lsof', str(mount_point)], capture_output=True)
+            
+            if lsof_check.returncode == 0:
+                # Mount point is busy, try lazy unmount
+                self.logger.warning(f"Mount point {mount_point} is busy, attempting lazy unmount")
+                subprocess.run(['umount', '-l', str(mount_point)], check=True)
+            else:
+                # Try regular unmount first
+                try:
+                    subprocess.run(['umount', str(mount_point)], check=True)
+                except subprocess.CalledProcessError:
+                    # If regular unmount fails, try forced unmount
+                    self.logger.warning(f"Regular unmount failed for {mount_point}, attempting force unmount")
+                    subprocess.run(['umount', '-f', str(mount_point)], check=True)
+
+            # Update mounted devices list
+            self.mounted_devices.discard(device_path)
+            
+            # Remove mount point directory if empty
+            if mount_point.exists():
+                if not os.listdir(mount_point):  # Only if empty
+                    mount_point.rmdir()
+                else:
+                    self.logger.warning(f"Mount point directory {mount_point} not empty, skipping removal")
+                    
+            self.logger.info(f"Successfully unmounted {device_path}")
+            return True
+
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Failed to unmount {device_path}: {e}")
+            return False
+        except OSError as e:
+            self.logger.error(f"Failed to clean up mount point directory: {e}")
+            return False
 
     def update_mounted_devices(self):
-        """Update the set of currently mounted devices"""
+        """Update the set of currently mounted devices, verifying they still exist"""
         self.mounted_devices.clear()
         partitions = psutil.disk_partitions(all=True)
         for partition in partitions:
-            self.mounted_devices.add(partition.device)
-            self.logger.debug(f"Found mounted device: {partition.device}")
+            device_path = partition.device
+            if (os.path.exists(device_path) and  # Verify device still exists
+                str(partition.mountpoint).startswith(str(self.mount_base))):  # Our mount
+                self.mounted_devices.add(device_path)
+                self.logger.debug(f"Found mounted device: {device_path}")
 
     def is_device_mounted(self, device_path):
         """Check if a device is already mounted"""
@@ -104,6 +218,9 @@ class USBMonitor:
 
     def scan_existing_devices(self):
         """Scan and mount already connected USB devices"""
+        # First validate existing mounts
+        self.validate_existing_mounts()
+        
         self.logger.info("Scanning for existing USB devices...")
         
         # Get all block devices
@@ -273,7 +390,7 @@ class USBMonitor:
         """Handle device events"""
         if device.action == 'add':
             self.logger.info(f"New device detected: {device.device_node}")
-            time.sleep(1)
+            time.sleep(1)  # Small delay to let system initialize device
             fs_type = self.get_filesystem_type(device.device_node)
             if fs_type:
                 self.logger.info(f"Detected filesystem: {fs_type}")
@@ -300,6 +417,7 @@ class USBMonitor:
                 continue
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     monitor = USBMonitor()
     try:
         monitor.start_monitoring()
