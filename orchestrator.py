@@ -40,22 +40,12 @@ class ServiceOrchestrator:
         """Start a service and return its process handle"""
         try:
             script_path = self.script_dir / script_name
-            
-            # For the Flask server, we need to run as the normal user
-            if service_name == 'server':
-                user = os.environ.get('SUDO_USER', 'necris-user')
-                process = subprocess.Popen(
-                    ['sudo', '-u', user, 'python3', str(script_path)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-            else:
-                # USB monitor and SMB manager need root privileges
-                process = subprocess.Popen(
-                    ['python3', str(script_path)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
+            # USB monitor and SMB manager need root privileges
+            process = subprocess.Popen(
+                ['python3', str(script_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
             
             self.logger.info(f"Started {service_name} (PID: {process.pid})")
             return process
