@@ -139,11 +139,13 @@ class SMBShareManager:
                 'path': str(mount_point),
                 'browseable': 'yes',
                 'read only': 'no',
+                'writable': 'yes',
                 'guest ok': 'yes',
-                'create mask': '0777',
+                'guest only': 'yes',
+                'create mask': '0666',
                 'directory mask': '0777',
-                'force create mode': '0777',
-                'force directory mode': '0777',
+                'force user': self.user,
+                'force group': self.user,
                 'public': 'yes'
             }
             
