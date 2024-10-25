@@ -70,8 +70,12 @@ class SMBShareManager:
 {include_line}
 
 [global]
-   map to guest = Bad User
-   guest account = nobody
+    map to guest = Bad User
+    guest account = nobody
+    server min protocol = NT1
+    client min protocol = NT1
+    ntlm auth = yes
+    lanman auth = yes
 ''')
                     
             self.logger.info("Samba configuration setup completed")
@@ -79,6 +83,7 @@ class SMBShareManager:
         except Exception as e:
             self.logger.error(f"Failed to setup Samba configuration: {e}")
             raise
+
 
     def validate_existing_shares(self):
         """Check for and clean up stale shares"""
@@ -128,26 +133,18 @@ class SMBShareManager:
             config = configparser.ConfigParser(strict=False)
             config.read(self.shares_conf_path)
             
-            # Add new share configuration with guest access and proper write permissions
+            # Simplified share configuration with guest access and write permissions
             config[share_name] = {
                 'comment': f'USB Drive {device_name}',
                 'path': str(mount_point),
                 'browseable': 'yes',
                 'read only': 'no',
-                'writable': 'yes',  # Explicitly enable write access
                 'guest ok': 'yes',
-                'guest only': 'yes',
                 'create mask': '0777',
                 'directory mask': '0777',
-                'force user': self.user,  # Use the actual user instead of nobody
-                'force group': self.user,  # Use the actual user's group
                 'force create mode': '0777',
                 'force directory mode': '0777',
-                'public': 'yes',
-                'map archive': 'no',  # Don't map DOS archive bit
-                'store dos attributes': 'no',  # Don't store DOS attributes
-                'valid users': 'guest',  # Allow guest user
-                'write list': 'guest'  # Explicitly allow guest to write
+                'public': 'yes'
             }
             
             # Write configuration
@@ -160,12 +157,13 @@ class SMBShareManager:
             # Update active shares
             self.active_shares.add(share_name)
             
-            self.logger.info(f"Successfully created writable share {share_name} for {mount_point}")
+            self.logger.info(f"Successfully created share {share_name} for {mount_point}")
             return True
             
         except Exception as e:
             self.logger.error(f"Failed to create share for {mount_point}: {e}")
             return False
+
 
     def remove_shares(self, share_names):
         """Remove one or more Samba shares"""
