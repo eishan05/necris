@@ -42,8 +42,8 @@ class ServiceOrchestrator:
             script_path = self.script_dir / script_name
             
             # For the Flask server, we need to run as the normal user
-            if service_name == 'flask_server':
-                user = os.environ.get('SUDO_USER', 'eishan05')
+            if service_name == 'server':
+                user = os.environ.get('SUDO_USER', 'necris-user')
                 process = subprocess.Popen(
                     ['sudo', '-u', user, 'python3', str(script_path)],
                     stdout=subprocess.PIPE,
