@@ -171,6 +171,7 @@ class ServiceOrchestrator:
             self.shutdown()
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     if os.geteuid() != 0:
         print("This script must be run as root!")
         sys.exit(1)
