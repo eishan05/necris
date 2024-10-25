@@ -25,8 +25,8 @@ class USBMonitor:
         self.monitor = pyudev.Monitor.from_netlink(self.context)
         self.monitor.filter_by(subsystem='block', device_type='partition')
         
-        # Set default user to eishan05
-        self.user = os.environ.get('SUDO_USER', 'eishan05')
+        # Set default user to necris-user
+        self.user = os.environ.get('SUDO_USER', 'necris-user')
         try:
             self.uid = pwd.getpwnam(self.user).pw_uid
             self.gid = grp.getgrnam(self.user).gr_gid

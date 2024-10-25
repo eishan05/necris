@@ -6,7 +6,7 @@ from pathlib import Path
 app = Flask(__name__)
 
 # Configuration
-UPLOAD_FOLDER = '/home/pi/shared'  # Change this to your desired share directory
+UPLOAD_FOLDER = '/media/necris-user'  # Change this to your desired share directory
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'mp4', 'zip'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER

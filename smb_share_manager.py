@@ -24,7 +24,7 @@ class SMBShareManager:
         self.logger = logging.getLogger(__name__)
         
         # Set default user (same as USB monitor)
-        self.user = os.environ.get('SUDO_USER', 'eishan05')
+        self.user = os.environ.get('SUDO_USER', 'necris-user')
         try:
             self.uid = pwd.getpwnam(self.user).pw_uid
             self.gid = grp.getgrnam(self.user).gr_gid
