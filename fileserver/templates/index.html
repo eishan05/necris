@@ -1,79 +1,166 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Raspberry Pi File Server</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Necris NAS</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .file-list {
+        table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
         }
-        .file-list th, .file-list td {
-            padding: 12px;
+        th, td {
+            padding: 8px;
             text-align: left;
             border-bottom: 1px solid #ddd;
         }
-        .file-list tr:hover {
+        th {
             background-color: #f5f5f5;
         }
         .folder {
-            color: #2196F3;
+            text-decoration: none;
+            color: #2563eb;
+        }
+        .folder:hover {
+            text-decoration: underline;
         }
         .file {
-            color: #333;
+            color: #374151;
         }
-        .upload-form {
-            margin: 20px 0;
-            padding: 20px;
-            background-color: #f8f9fa;
+        .action-button {
+            display: inline-block;
+            padding: 4px 12px;
+            margin: 0 4px;
+            background-color: #2563eb;
+            color: white;
+            text-decoration: none;
             border-radius: 4px;
+        }
+        .action-button:hover {
+            background-color: #1d4ed8;
+        }
+        .delete-button {
+            background-color: #dc2626;
+        }
+        .delete-button:hover {
+            background-color: #b91c1c;
         }
         .breadcrumb {
             margin-bottom: 20px;
-            padding: 8px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
+            font-size: 0.875rem;
         }
-        .action-button {
-            color: #fff;
-            background-color: #007bff;
+        .breadcrumb a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        .instructions {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+        .instructions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            margin-bottom: 16px;
+        }
+        .instructions-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        .instructions-content {
+            display: none;
+        }
+        .instructions-content.show {
+            display: block;
+        }
+        .toggle-icon {
+            width: 24px;
+            height: 24px;
+            transition: transform 0.3s ease;
+        }
+        .toggle-icon.rotated {
+            transform: rotate(180deg);
+        }
+        .platform-instructions {
+            margin-bottom: 24px;
+        }
+        .platform-instructions h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+        .platform-instructions ol {
+            list-style-type: decimal;
+            padding-left: 24px;
+        }
+        .platform-instructions ul {
+            list-style-type: disc;
+            padding-left: 40px;
+            margin-top: 8px;
+        }
+        .platform-instructions li {
+            margin-bottom: 8px;
+        }
+        code {
+            background-color: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .warning {
+            background-color: #fff7ed;
+            border-left: 4px solid #f97316;
+            padding: 16px;
+            margin-top: 16px;
+        }
+        .warning p {
+            color: #9a3412;
+            font-size: 0.875rem;
+            margin: 0;
+        }
+        .upload-section {
+            margin-bottom: 24px;
+            padding: 16px;
+            background-color: #f9fafb;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        .upload-section h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .upload-form {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .upload-button {
+            background-color: #2563eb;
+            color: white;
+            padding: 6px 12px;
             border: none;
-            padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
         }
-        .action-button:hover {
-            background-color: #0056b3;
-        }
-        .delete-button {
-            color: #dc3545;
-            text-decoration: none;
-            padding: 4px 8px;
-        }
-        .delete-button:hover {
-            color: #bd2130;
+        .upload-button:hover {
+            background-color: #1d4ed8;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Raspberry Pi File Server</h1>
-        
+    <div style="max-width: 1200px; margin: 0 auto; padding: 16px;">
+        <h1 style="font-size: 2rem; font-weight: bold; margin-bottom: 24px;">Raspberry Pi File Server</h1>
+
         <div class="breadcrumb">
             <a href="{{ url_for('index') }}">Home</a>
             {% if current_path %}
@@ -86,13 +173,80 @@
             {% endif %}
         </div>
 
-        <form class="upload-form" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" required>
-            <input type="hidden" name="current_path" value="{{ current_path }}">
-            <input type="submit" value="Upload" class="action-button">
-        </form>
+        <!-- Instructions Section - Only shown on root page -->
+        {% if not current_path %}
+        <div class="instructions">
+            <div class="instructions-header" onclick="toggleInstructions()">
+                <h2>Access USB Drives Over Network</h2>
+                <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            
+            <div class="instructions-content">
+                {% set drives = namespace(names=[]) %}
+                {% for file in files %}
+                    {% if file.is_dir %}
+                        {% set _ = drives.names.append("USB_" + file.name) %}
+                    {% endif %}
+                {% endfor %}
 
-        <table class="file-list">
+                <div class="platform-instructions">
+                    <h3>Windows Users</h3>
+                    <ol>
+                        <li>Open File Explorer</li>
+                        <li>In the address bar, type: <code>\\necris.local</code></li>
+                        <li>Press Enter</li>
+                        <li>You will see these shared drives:</li>
+                        <ul>
+                            {% for drive in drives.names %}
+                                <li><code>{{ drive }}</code></li>
+                            {% endfor %}
+                        </ul>
+                        <li>Double-click any drive to access its files</li>
+                        <li>No login required - guest access is enabled</li>
+                    </ol>
+                </div>
+
+                <div class="platform-instructions">
+                    <h3>Mac Users</h3>
+                    <ol>
+                        <li>Click on Finder</li>
+                        <li>Press ⌘K or select Go → Connect to Server</li>
+                        <li>Type: <code>smb://necris.local</code></li>
+                        <li>Click Connect</li>
+                        <li>Select Guest when prompted</li>
+                        <li>You will see these shared drives:</li>
+                        <ul>
+                            {% for drive in drives.names %}
+                                <li><code>{{ drive }}</code></li>
+                            {% endfor %}
+                        </ul>
+                        <li>Select the drive you want to access</li>
+                    </ol>
+                </div>
+
+                {% if not drives.names %}
+                <div class="warning">
+                    <p>No USB drives are currently connected. Connect a USB drive to see it shared here.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h3>Upload Files</h3>
+            <form class="upload-form" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" required>
+                <input type="hidden" name="current_path" value="{{ current_path }}">
+                <button type="submit" class="upload-button">Upload</button>
+            </form>
+        </div>
+
+        <!-- File Browser Section -->
+        <table>
             <thead>
                 <tr>
                     <th>Name</th>
@@ -105,29 +259,37 @@
                 <tr>
                     <td>
                         <a href="{{ url_for('index', path=parent_path) }}" class="folder">
-                            ../ (Parent Directory)
+                            📁 ../ (Parent Directory)
                         </a>
                     </td>
                     <td></td>
                     <td></td>
                 </tr>
                 {% endif %}
+                
                 {% for file in files %}
                 <tr>
                     <td>
                         {% if file.is_dir %}
-                            <a href="{{ url_for('index', path=(current_path + '/' + file.name).lstrip('/')) }}" class="folder">
-                                📁 {{ file.name }}/
-                            </a>
+                        <a href="{{ url_for('index', path=(current_path + '/' + file.name).lstrip('/')) }}" class="folder">
+                            📁 {{ file.name }}/
+                        </a>
                         {% else %}
-                            <span class="file">📄 {{ file.name }}</span>
+                        <span class="file">📄 {{ file.name }}</span>
                         {% endif %}
                     </td>
                     <td>{{ file.size }}</td>
                     <td>
                         {% if not file.is_dir %}
-                            <a href="{{ url_for('download_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" class="action-button">Download</a>
-                            <a href="{{ url_for('delete_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" class="delete-button" onclick="return confirm('Are you sure you want to delete this file?')">Delete</a>
+                        <a href="{{ url_for('download_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" 
+                           class="action-button">
+                            Download
+                        </a>
+                        <a href="{{ url_for('delete_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" 
+                           class="action-button delete-button"
+                           onclick="return confirm('Are you sure you want to delete this file?')">
+                            Delete
+                        </a>
                         {% endif %}
                     </td>
                 </tr>
@@ -135,5 +297,33 @@
             </tbody>
         </table>
     </div>
+
+    <script>
+        function toggleInstructions() {
+            const content = document.querySelector('.instructions-content');
+            const icon = document.querySelector('.toggle-icon');
+            content.classList.toggle('show');
+            icon.classList.toggle('rotated');
+
+            // Only store state when we're on the root page
+            if (!window.location.pathname.split('/').filter(Boolean).length) {
+                localStorage.setItem('instructionsVisible', content.classList.contains('show'));
+            }
+        }
+
+        // On page load, restore the previous state only on root page
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!window.location.pathname.split('/').filter(Boolean).length) {
+                const content = document.querySelector('.instructions-content');
+                const icon = document.querySelector('.toggle-icon');
+                const wasVisible = localStorage.getItem('instructionsVisible') === 'true';
+                
+                if (wasVisible) {
+                    content.classList.add('show');
+                    icon.classList.add('rotated');
+                }
+            }
+        });
+    </script>
 </body>
 </html>

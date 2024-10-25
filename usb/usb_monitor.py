@@ -250,22 +250,31 @@ class USBMonitor:
     def get_filesystem_type(self, device_path):
         """Detect filesystem type using blkid"""
         try:
-            for _ in range(3):
+            self.logger.debug(f"Attempting to detect filesystem type for {device_path}")
+            for attempt in range(3):
+                self.logger.debug(f"Attempt {attempt + 1} to detect filesystem type")
                 result = subprocess.run(
                     ['blkid', '-o', 'value', '-s', 'TYPE', device_path],
                     capture_output=True,
                     text=True
                 )
+                self.logger.debug(f"blkid output: '{result.stdout.strip()}', stderr: '{result.stderr.strip()}'")
                 if result.stdout.strip():
-                    return result.stdout.strip()
+                    fs_type = result.stdout.strip()
+                    self.logger.debug(f"Detected filesystem type: {fs_type}")
+                    return fs_type
                 time.sleep(1)
+            self.logger.warning(f"Failed to detect filesystem type after 3 attempts for {device_path}")
             return None
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to detect filesystem type: {e}")
             return None
 
+
     def mount_device(self, device_path, filesystem_type):
         """Mount the device with appropriate filesystem type and permissions"""
+        self.logger.debug(f"Attempting to mount {device_path} with filesystem type {filesystem_type}")
+        
         # Skip if already mounted
         if self.is_device_mounted(device_path):
             self.logger.info(f"Device {device_path} is already mounted")
@@ -273,6 +282,7 @@ class USBMonitor:
 
         device_name = os.path.basename(device_path)
         mount_point = self.mount_base / device_name
+        self.logger.debug(f"Creating mount point at {mount_point}")
         mount_point.mkdir(exist_ok=True)
         os.chown(mount_point, self.uid, self.gid)
 
@@ -280,18 +290,18 @@ class USBMonitor:
         mount_options = []
         
         if filesystem_type == 'vfat':
-            # For FAT filesystems
+            self.logger.debug("Using vfat mount options")
             mount_options.extend([
                 f'uid={self.uid}',
                 f'gid={self.gid}',
                 'rw',
-                'dmask=022',  # rwxr-xr-x for directories
-                'fmask=133',  # rw-r--r-- for files
+                'dmask=022',
+                'fmask=133',
                 'utf8',
                 'flush'
             ])
         elif filesystem_type == 'ntfs':
-            # For NTFS filesystems
+            self.logger.debug("Using ntfs mount options")
             mount_options.extend([
                 f'uid={self.uid}',
                 f'gid={self.gid}',
@@ -303,7 +313,7 @@ class USBMonitor:
                 'ntfs-3g'
             ])
         elif filesystem_type == 'exfat':
-            # For exFAT filesystems
+            self.logger.debug("Using exfat mount options")
             mount_options.extend([
                 f'uid={self.uid}',
                 f'gid={self.gid}',
@@ -312,7 +322,7 @@ class USBMonitor:
                 'fmask=133'
             ])
         elif filesystem_type in ['ext4', 'ext3', 'ext2']:
-            # For ext filesystems
+            self.logger.debug(f"Using {filesystem_type} mount options")
             mount_options.extend([
                 'rw',
                 'defaults',
@@ -324,6 +334,8 @@ class USBMonitor:
         if mount_options:
             mount_cmd.extend(['-o', ','.join(mount_options)])
         mount_cmd.extend([device_path, str(mount_point)])
+        
+        self.logger.debug(f"Mount command: {' '.join(mount_cmd)}")
 
         try:
             # Mount with retry mechanism
@@ -337,7 +349,7 @@ class USBMonitor:
                     
                     # For ext filesystems, we need to set permissions after mounting
                     if filesystem_type in ['ext4', 'ext3', 'ext2']:
-                        self.logger.info("Setting permissions for ext filesystem...")
+                        self.logger.debug("Setting permissions for ext filesystem...")
                         self.recursively_set_permissions(str(mount_point))
                     
                     # Verify mount was successful
@@ -346,6 +358,7 @@ class USBMonitor:
                     
                     return True
                 except subprocess.CalledProcessError as e:
+                    self.logger.error(f"Mount attempt {attempt + 1} failed: stdout='{e.stdout}', stderr='{e.stderr}'")
                     if attempt == 2:  # Last attempt
                         raise
                     time.sleep(1)
@@ -358,43 +371,19 @@ class USBMonitor:
                 pass
             return False
 
-    def unmount_device(self, device_path):
-        """Unmount the device"""
-        try:
-            # First try with regular umount
-            subprocess.run(['umount', device_path], check=True)
-            # Update mounted devices list
-            self.mounted_devices.discard(device_path)
-        except subprocess.CalledProcessError:
-            try:
-                # If regular unmount fails, try forced unmount
-                subprocess.run(['umount', '-f', device_path], check=True)
-                self.mounted_devices.discard(device_path)
-            except subprocess.CalledProcessError as e:
-                self.logger.error(f"Failed to force unmount {device_path}: {e}")
-                return False
-
-        # Remove mount point directory
-        try:
-            device_name = os.path.basename(device_path)
-            mount_point = self.mount_base / device_name
-            if mount_point.exists():
-                mount_point.rmdir()
-            self.logger.info(f"Successfully unmounted {device_path}")
-            return True
-        except OSError as e:
-            self.logger.error(f"Failed to remove mount point directory: {e}")
-            return False
-
     def device_handler(self, device):
         """Handle device events"""
         if device.action == 'add':
             self.logger.info(f"New device detected: {device.device_node}")
+            self.logger.debug(f"Device properties: {dict(device)}")
             time.sleep(1)  # Small delay to let system initialize device
             fs_type = self.get_filesystem_type(device.device_node)
+            self.logger.debug(f"Filesystem type detection returned: {fs_type}")
             if fs_type:
                 self.logger.info(f"Detected filesystem: {fs_type}")
                 self.mount_device(device.device_node, fs_type)
+            else:
+                self.logger.warning(f"No filesystem type detected for {device.device_node}")
         elif device.action == 'remove':
             self.logger.info(f"Device removed: {device.device_node}")
             self.unmount_device(device.device_node)
