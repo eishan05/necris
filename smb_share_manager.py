@@ -8,10 +8,9 @@ import pwd
 import grp
 from pathlib import Path
 import configparser
-import psutil
-import threading
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from password_manager import PasswordManager
 
 class SMBShareManager:
     def __init__(self):
@@ -23,17 +22,25 @@ class SMBShareManager:
         )
         self.logger = logging.getLogger(__name__)
         
-        # Set default user (same as USB monitor)
-        self.user = os.environ.get('SUDO_USER', 'necris-user')
+        # Initialize password manager
+        self.password_manager = PasswordManager()
+        
+        # Get default credentials
+        credentials = self.password_manager.get_credentials()
+        self.smb_user = credentials['username']
+        
+        # Set default system user (for file ownership)
+        self.system_user = os.environ.get('SUDO_USER', 'necris-user')
+        
         try:
-            self.uid = pwd.getpwnam(self.user).pw_uid
-            self.gid = grp.getgrnam(self.user).gr_gid
+            self.uid = pwd.getpwnam(self.system_user).pw_uid
+            self.gid = grp.getgrnam(self.system_user).gr_gid
         except KeyError:
-            self.logger.error(f"Could not find user {self.user}")
-            raise SystemExit(f"User {self.user} not found in system")
+            self.logger.error(f"Could not find user {self.system_user}")
+            raise SystemExit(f"User {self.system_user} not found in system")
             
-        # Base mount directory (same as USB monitor)
-        self.mount_base = Path(f'/media/{self.user}')
+        # Base mount directory
+        self.mount_base = Path(f'/media/{self.system_user}')
         
         # Samba configuration
         self.smb_conf_path = '/etc/samba/smb.conf'
@@ -41,12 +48,53 @@ class SMBShareManager:
         self.active_shares = set()
         
         # Initialize
+        self.setup_samba_user()
         self.setup_samba_config()
+        self.verify_samba_setup()
         self.validate_existing_shares()
         
         # Setup filesystem watchdog
         self.observer = Observer()
         self.setup_watchdog()
+
+    def setup_samba_user(self):
+        """Create the default Samba user if it doesn't exist"""
+        try:
+            # First, create system user if it doesn't exist
+            try:
+                pwd.getpwnam(self.smb_user)
+            except KeyError:
+                # Create system user with home directory and shell
+                subprocess.run([
+                    'useradd',
+                    '-m',  # Create home directory
+                    '-s', '/bin/false',  # No shell access
+                    self.smb_user
+                ], check=True)
+                self.logger.info(f"Created system user {self.smb_user}")
+
+            # Set up or update Samba user and password
+            try:
+                # Delete existing Samba user if exists
+                subprocess.run(['smbpasswd', '-x', self.smb_user], 
+                            stderr=subprocess.DEVNULL)
+            except:
+                pass
+
+            # Create new Samba user
+            # First add to smbpasswd file
+            subprocess.run(['smbpasswd', '-a', self.smb_user], 
+                        input=f"necris-is-awesome\nnecris-is-awesome\n".encode(),
+                        check=True)
+            
+            # Then enable the user
+            subprocess.run(['smbpasswd', '-e', self.smb_user], check=True)
+            
+            self.logger.info(f"Samba user {self.smb_user} setup completed")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to setup Samba user: {e}")
+            raise
 
     def setup_samba_config(self):
         """Ensure Samba configuration is properly set up"""
@@ -59,25 +107,49 @@ class SMBShareManager:
             # Check if main smb.conf includes our shares.conf
             include_line = f'include = {self.shares_conf_path}'
             
-            with open(self.smb_conf_path, 'r') as f:
-                smb_conf_content = f.read()
-                
-            if include_line not in smb_conf_content:
-                # Add include directive and guest access configuration to main smb.conf
-                with open(self.smb_conf_path, 'a') as f:
-                    f.write(f'''
+            # Create new smb.conf with proper settings
+            smb_config = f'''[global]
+        workgroup = WORKGROUP
+        server string = Necris File Server
+        server role = standalone server
+        security = user
+        map to guest = never
+        encrypt passwords = yes
+        
+        # Protocol settings
+        server min protocol = NT1
+        client min protocol = NT1
+        ntlm auth = yes
+        lanman auth = yes
+        
+        # Logging
+        log file = /var/log/samba/log.%m
+        max log size = 1000
+        logging = file
+        panic action = /usr/share/samba/panic-action %d
+        
+        # Authentication
+        passdb backend = tdbsam
+        obey pam restrictions = yes
+        unix password sync = yes
+        passwd program = /usr/bin/passwd %u
+        passwd chat = *Enter\\snew\\s*\\spassword:* %n\\n *Retype\\snew\\s*\\spassword:* %n\\n *password\\supdated\\ssuccessfully* .
+        pam password change = yes
+        
 ; USB Share configurations
 {include_line}
-
-[global]
-    map to guest = Bad User
-    guest account = nobody
-    server min protocol = NT1
-    client min protocol = NT1
-    ntlm auth = yes
-    lanman auth = yes
-''')
-                    
+'''
+            # Write the configuration
+            with open(self.smb_conf_path, 'w') as f:
+                f.write(smb_config)
+                
+            # Ensure proper permissions
+            os.chmod(self.smb_conf_path, 0o644)
+            
+            # Restart Samba services to apply changes
+            subprocess.run(['systemctl', 'restart', 'smbd'], check=True)
+            subprocess.run(['systemctl', 'restart', 'nmbd'], check=True)
+            
             self.logger.info("Samba configuration setup completed")
             
         except Exception as e:
@@ -113,6 +185,34 @@ class SMBShareManager:
         except Exception as e:
             self.logger.error(f"Error validating existing shares: {e}")
 
+    def verify_samba_setup(self):
+        """Verify Samba user setup"""
+        try:
+            # Check if user exists in Samba database
+            result = subprocess.run(['pdbedit', '-L'], 
+                                capture_output=True, 
+                                text=True)
+            
+            if self.smb_user not in result.stdout:
+                self.logger.warning(f"Samba user {self.smb_user} not found, recreating...")
+                self.setup_samba_user()
+                
+            # Test user authentication
+            test_auth = subprocess.run(
+                ['smbclient', '-L', 'localhost', '-U', f'{self.smb_user}%necris-is-awesome'],
+                capture_output=True
+            )
+            
+            if test_auth.returncode != 0:
+                self.logger.warning("Samba authentication test failed, resetting password...")
+                self.setup_samba_user()
+                
+            self.logger.info("Samba setup verification completed")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to verify Samba setup: {e}")
+            raise
+
     def update_active_shares(self):
         """Update the set of currently active shares"""
         config = configparser.ConfigParser(strict=False)
@@ -120,7 +220,7 @@ class SMBShareManager:
         self.active_shares = {section for section in config.sections() if section.startswith('USB_')}
 
     def create_share(self, mount_point):
-        """Create a new Samba share for a mounted device with guest access"""
+        """Create a new Samba share for a mounted device with user authentication"""
         try:
             device_name = mount_point.name
             share_name = f"USB_{device_name}"
@@ -133,20 +233,19 @@ class SMBShareManager:
             config = configparser.ConfigParser(strict=False)
             config.read(self.shares_conf_path)
             
-            # Simplified share configuration with guest access and write permissions
+            # Share configuration with user authentication
             config[share_name] = {
                 'comment': f'USB Drive {device_name}',
                 'path': str(mount_point),
                 'browseable': 'yes',
                 'read only': 'no',
                 'writable': 'yes',
-                'guest ok': 'yes',
-                'guest only': 'yes',
+                'guest ok': 'no',  # Disable guest access
+                'valid users': self.smb_user,  # Only allow our default user
                 'create mask': '0666',
                 'directory mask': '0777',
-                'force user': self.user,
-                'force group': self.user,
-                'public': 'yes'
+                'force user': self.system_user,
+                'force group': self.system_user
             }
             
             # Write configuration

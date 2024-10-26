@@ -3,163 +3,242 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Necris NAS</title>
+    <title>Necris File Server</title>
     <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-        th {
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
             background-color: #f5f5f5;
         }
-        .folder {
-            text-decoration: none;
-            color: #2563eb;
-        }
-        .folder:hover {
-            text-decoration: underline;
-        }
-        .file {
-            color: #374151;
-        }
-        .action-button {
-            display: inline-block;
-            padding: 4px 12px;
-            margin: 0 4px;
-            background-color: #2563eb;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-        }
-        .action-button:hover {
-            background-color: #1d4ed8;
-        }
-        .delete-button {
-            background-color: #dc2626;
-        }
-        .delete-button:hover {
-            background-color: #b91c1c;
-        }
-        .breadcrumb {
-            margin-bottom: 20px;
-            font-size: 0.875rem;
-        }
-        .breadcrumb a {
-            color: #2563eb;
-            text-decoration: none;
-        }
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
-        .instructions {
-            background: white;
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 2rem;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            padding: 24px;
-            margin-bottom: 32px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        .instructions-header {
+
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            cursor: pointer;
-            margin-bottom: 16px;
+            margin-bottom: 2rem;
         }
+
+        .header h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .user-actions a {
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .change-password-link {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .logout-link {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .change-password-link:hover {
+            background-color: #218838;
+        }
+
+        .logout-link:hover {
+            background-color: #c82333;
+        }
+
+        .breadcrumb {
+            margin-bottom: 1.5rem;
+            padding: 0.5rem;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .breadcrumb a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .instructions {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background-color: #e9ecef;
+            border-radius: 4px;
+        }
+
+        .instructions-header {
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         .instructions-header h2 {
-            font-size: 1.5rem;
-            font-weight: 600;
             margin: 0;
         }
-        .instructions-content {
-            display: none;
-        }
-        .instructions-content.show {
-            display: block;
-        }
+
         .toggle-icon {
             width: 24px;
             height: 24px;
-            transition: transform 0.3s ease;
+            transition: transform 0.2s;
         }
-        .toggle-icon.rotated {
-            transform: rotate(180deg);
-        }
+
         .platform-instructions {
-            margin-bottom: 24px;
-        }
-        .platform-instructions h3 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-top: 16px;
-            margin-bottom: 8px;
-        }
-        .platform-instructions ol {
-            list-style-type: decimal;
-            padding-left: 24px;
-        }
-        .platform-instructions ul {
-            list-style-type: disc;
-            padding-left: 40px;
-            margin-top: 8px;
-        }
-        .platform-instructions li {
-            margin-bottom: 8px;
-        }
-        code {
-            background-color: #f3f4f6;
-            padding: 2px 6px;
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: white;
             border-radius: 4px;
-            font-family: monospace;
         }
+
         .warning {
-            background-color: #fff7ed;
-            border-left: 4px solid #f97316;
-            padding: 16px;
-            margin-top: 16px;
+            color: #856404;
+            background-color: #fff3cd;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
         }
-        .warning p {
-            color: #9a3412;
-            font-size: 0.875rem;
-            margin: 0;
-        }
+
         .upload-section {
-            margin-bottom: 24px;
-            padding: 16px;
-            background-color: #f9fafb;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 4px;
         }
-        .upload-section h3 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 12px;
+
+        .file-list {
+            width: 100%;
+            border-collapse: collapse;
         }
+
+        .file-list th,
+        .file-list td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .folder {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .file {
+            color: #212529;
+            text-decoration: none;
+        }
+
+        .action-button {
+            padding: 0.375rem 0.75rem;
+            margin-right: 0.5rem;
+            border-radius: 4px;
+            text-decoration: none;
+            color: white;
+            background-color: #007bff;
+        }
+
+        .delete-button {
+            background-color: #dc3545;
+        }
+
+        .action-button:hover {
+            opacity: 0.9;
+        }
+
+        .flash-messages {
+            margin-bottom: 1rem;
+        }
+
+        .flash-message {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+            color: white;
+            background-color: #28a745;
+        }
+
+        .flash-message.error {
+            background-color: #dc3545;
+        }
+
         .upload-form {
             display: flex;
-            gap: 12px;
+            gap: 1rem;
             align-items: center;
         }
+
         .upload-button {
-            background-color: #2563eb;
+            background-color: #28a745;
             color: white;
-            padding: 6px 12px;
             border: none;
+            padding: 0.5rem 1rem;
             border-radius: 4px;
             cursor: pointer;
+            transition: background-color 0.2s;
         }
+
         .upload-button:hover {
-            background-color: #1d4ed8;
+            background-color: #218838;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .upload-form {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
-    <div style="max-width: 1200px; margin: 0 auto; padding: 16px;">
-        <h1 style="font-size: 2rem; font-weight: bold; margin-bottom: 24px;">Necris File Server</h1>
+    <div class="container">
+        <div class="header">
+            <h1>Necris File Server</h1>
+            <div class="user-actions">
+                <a href="{{ url_for('change_password') }}" class="change-password-link">Change Password</a>
+                <a href="{{ url_for('logout') }}" class="logout-link">Log Out</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-message {% if category == 'error' %}error{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
 
         <div class="breadcrumb">
             <a href="{{ url_for('index') }}">Home</a>
@@ -173,17 +252,15 @@
             {% endif %}
         </div>
 
-        <!-- Instructions Section - Only shown on root page -->
         {% if not current_path %}
         <div class="instructions">
             <div class="instructions-header" onclick="toggleInstructions()">
                 <h2>Access USB Drives Over Network</h2>
                 <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
             </div>
-            
-            <div class="instructions-content">
+            <div class="instructions-content" style="display: none;">
                 {% set drives = namespace(names=[]) %}
                 {% for file in files %}
                     {% if file.is_dir %}
@@ -197,14 +274,19 @@
                         <li>Open File Explorer</li>
                         <li>In the address bar, type: <code>\\necris.local</code></li>
                         <li>Press Enter</li>
-                        <li>You will see these shared drives:</li>
-                        <ul>
-                            {% for drive in drives.names %}
+                        <li>When prompted, enter:
+                            <ul>
+                                <li>Username: necris-client</li>
+                                <li>Password: [your password]</li>
+                            </ul>
+                        </li>
+                        <li>You will see these shared drives:
+                            <ul>
+                                {% for drive in drives.names %}
                                 <li><code>{{ drive }}</code></li>
-                            {% endfor %}
-                        </ul>
-                        <li>Double-click any drive to access its files</li>
-                        <li>No login required - guest access is enabled</li>
+                                {% endfor %}
+                            </ul>
+                        </li>
                     </ol>
                 </div>
 
@@ -215,27 +297,31 @@
                         <li>Press ⌘K or select Go → Connect to Server</li>
                         <li>Type: <code>smb://necris.local</code></li>
                         <li>Click Connect</li>
-                        <li>Select Guest when prompted</li>
-                        <li>You will see these shared drives:</li>
-                        <ul>
-                            {% for drive in drives.names %}
+                        <li>When prompted, enter:
+                            <ul>
+                                <li>Username: necris-client</li>
+                                <li>Password: [your password]</li>
+                            </ul>
+                        </li>
+                        <li>Select the drive you want to access:
+                            <ul>
+                                {% for drive in drives.names %}
                                 <li><code>{{ drive }}</code></li>
-                            {% endfor %}
-                        </ul>
-                        <li>Select the drive you want to access</li>
+                                {% endfor %}
+                            </ul>
+                        </li>
                     </ol>
                 </div>
 
                 {% if not drives.names %}
                 <div class="warning">
-                    <p>No USB drives are currently connected. Connect a USB drive to see it shared here.</p>
+                    No USB drives are currently connected. Connect a USB drive to see it shared here.
                 </div>
                 {% endif %}
             </div>
         </div>
         {% endif %}
 
-        <!-- Upload Section -->
         <div class="upload-section">
             <h3>Upload Files</h3>
             <form class="upload-form" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
@@ -245,8 +331,7 @@
             </form>
         </div>
 
-        <!-- File Browser Section -->
-        <table>
+        <table class="file-list">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -257,13 +342,9 @@
             <tbody>
                 {% if current_path %}
                 <tr>
-                    <td>
-                        <a href="{{ url_for('index', path=parent_path) }}" class="folder">
-                            📁 ../ (Parent Directory)
-                        </a>
+                    <td colspan="3">
+                        <a href="{{ url_for('index', path=parent_path) }}" class="folder">📁 ../ (Parent Directory)</a>
                     </td>
-                    <td></td>
-                    <td></td>
                 </tr>
                 {% endif %}
                 
@@ -271,25 +352,24 @@
                 <tr>
                     <td>
                         {% if file.is_dir %}
-                        <a href="{{ url_for('index', path=(current_path + '/' + file.name).lstrip('/')) }}" class="folder">
-                            📁 {{ file.name }}/
-                        </a>
+                            <a href="{{ url_for('index', path=(current_path + '/' + file.name).lstrip('/')) }}" class="folder">
+                                📁 {{ file.name }}/
+                            </a>
                         {% else %}
-                        <span class="file">📄 {{ file.name }}</span>
+                            <span class="file">📄 {{ file.name }}</span>
                         {% endif %}
                     </td>
                     <td>{{ file.size }}</td>
                     <td>
                         {% if not file.is_dir %}
-                        <a href="{{ url_for('download_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" 
-                           class="action-button">
-                            Download
-                        </a>
-                        <a href="{{ url_for('delete_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" 
-                           class="action-button delete-button"
-                           onclick="return confirm('Are you sure you want to delete this file?')">
-                            Delete
-                        </a>
+                            <a href="{{ url_for('download_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" class="action-button">
+                                Download
+                            </a>
+                            <a href="{{ url_for('delete_file', filepath=(current_path + '/' + file.name).lstrip('/')) }}" 
+                               class="action-button delete-button"
+                               onclick="return confirm('Are you sure you want to delete this file?')">
+                                Delete
+                            </a>
                         {% endif %}
                     </td>
                 </tr>
@@ -302,28 +382,15 @@
         function toggleInstructions() {
             const content = document.querySelector('.instructions-content');
             const icon = document.querySelector('.toggle-icon');
-            content.classList.toggle('show');
-            icon.classList.toggle('rotated');
-
-            // Only store state when we're on the root page
-            if (!window.location.pathname.split('/').filter(Boolean).length) {
-                localStorage.setItem('instructionsVisible', content.classList.contains('show'));
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                content.style.display = 'none';
+                icon.style.transform = 'rotate(0)';
             }
         }
-
-        // On page load, restore the previous state only on root page
-        document.addEventListener('DOMContentLoaded', function() {
-            if (!window.location.pathname.split('/').filter(Boolean).length) {
-                const content = document.querySelector('.instructions-content');
-                const icon = document.querySelector('.toggle-icon');
-                const wasVisible = localStorage.getItem('instructionsVisible') === 'true';
-                
-                if (wasVisible) {
-                    content.classList.add('show');
-                    icon.classList.add('rotated');
-                }
-            }
-        });
     </script>
 </body>
 </html>

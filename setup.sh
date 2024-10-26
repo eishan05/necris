@@ -12,6 +12,7 @@ sudo apt install -y python3-pyudev
 sudo apt install -y python3-psutil
 sudo apt install -y ntfs-3g exfat-fuse lsof
 sudo apt install -y samba
+sudo apt install -y smbclient
 
 # Make orchestrator executable
 sudo chmod +x orchestrator.py

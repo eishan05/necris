@@ -1,16 +1,22 @@
-from flask import Flask, render_template, request, send_file, redirect, url_for
+from flask import Flask, render_template, request, send_file, redirect, url_for, flash, session
 import os
 from werkzeug.utils import secure_filename
-from pathlib import Path
+from functools import wraps
+from password_manager import PasswordManager
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Generate a random secret key for sessions
 
 # Configuration
-UPLOAD_FOLDER = '/media/necris-user'  # Change this to your desired share directory
+UPLOAD_FOLDER = '/media/necris-user'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'mp4', 'zip'}
+CREDENTIALS_FILE = '/etc/necris/credentials.json'
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Initialize password manager
+password_manager = PasswordManager()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -22,7 +28,58 @@ def get_human_readable_size(size):
         size /= 1024
     return f"{size:.1f} TB"
 
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        credentials = password_manager.get_credentials()
+        username = request.form['username']
+        password = request.form['password']
+        
+        if (username == credentials['username'] and 
+            password_manager.verify_password(password)):
+            session['logged_in'] = True
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        else:
+            flash('Invalid username or password')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        current_password = request.form['current_password']
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+        
+        if not password_manager.verify_password(current_password):
+            flash('Current password is incorrect')
+        elif new_password != confirm_password:
+            flash('New passwords do not match')
+        elif password_manager.update_password(new_password):
+            flash('Password successfully updated')
+            return redirect(url_for('index'))
+        else:
+            flash('Failed to update password. Please try again.')
+    
+    return render_template('change_password.html')
+
 @app.route('/')
+@login_required
 def index():
     current_path = request.args.get('path', '')
     full_path = os.path.join(UPLOAD_FOLDER, current_path)
@@ -50,6 +107,7 @@ def index():
                          parent_path=os.path.dirname(current_path))
 
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload_file():
     if 'file' not in request.files:
         return redirect(request.referrer)
@@ -68,11 +126,13 @@ def upload_file():
     return redirect(url_for('index', path=current_path))
 
 @app.route('/download/<path:filepath>')
+@login_required
 def download_file(filepath):
     full_path = os.path.join(UPLOAD_FOLDER, filepath)
     return send_file(full_path, as_attachment=True)
 
 @app.route('/delete/<path:filepath>')
+@login_required
 def delete_file(filepath):
     full_path = os.path.join(UPLOAD_FOLDER, filepath)
     if os.path.exists(full_path):
