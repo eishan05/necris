@@ -10,6 +10,7 @@ class PasswordManager:
     def __init__(self, credentials_file='/etc/necris/credentials.json'):
         self.credentials_file = credentials_file
         self.logger = logging.getLogger(__name__)
+        self.password_file = '/etc/necris/smb.secret'
         
         # Ensure credentials directory exists
         os.makedirs(os.path.dirname(credentials_file), exist_ok=True)
@@ -22,7 +23,8 @@ class PasswordManager:
         """Initialize default credentials"""
         credentials = {
             'username': 'necris-client',
-            'password': hashlib.sha256('necris-is-awesome'.encode()).hexdigest()
+            'password': hashlib.sha256('necris-is-awesome'.encode()).hexdigest(),
+            'is_default_password': True  # Add this flag
         }
         self._save_credentials(credentials)
         self._update_samba_password('necris-is-awesome')
@@ -61,15 +63,95 @@ class PasswordManager:
             self.logger.error(f"Error updating Samba password: {e}")
             return False
     
-    def update_password(self, new_password):
-        """Update both file credentials and Samba password"""
+    def get_current_password(self):
+        """Get the actual password (for Samba setup)"""
+        credentials = self.get_credentials()
+        if credentials.get('is_default_password', True):
+            return 'necris-is-awesome'
+        else:
+            # We'll need to store the actual password in a secure location
+            try:
+                with open(self.password_file, 'r') as f:
+                    return f.read().strip()
+            except:
+                return 'necris-is-awesome'
+    
+    def _terminate_smb_sessions(self):
+        """Force disconnect all SMB sessions for necris-client user"""
         try:
-            # First update Samba password
+            # Get all sessions in JSON format
+            result = subprocess.run(
+                ['smbstatus', '--json'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            if result.returncode == 0:
+                try:
+                    status = json.loads(result.stdout)
+                    
+                    # Process sessions
+                    if 'sessions' in status:
+                        for session in status['sessions']:
+                            if session.get('username') == 'necris-client':
+                                # Get process ID for this session
+                                pid = session.get('pid')
+                                if pid:
+                                    # Terminate specific session
+                                    subprocess.run(['kill', '-TERM', str(pid)])
+                                    self.logger.info(f"Terminated SMB session PID: {pid}")
+                    
+                    # Also process encrypted sessions if present
+                    if 'encrypted_sessions' in status:
+                        for session in status['encrypted_sessions']:
+                            if session.get('username') == 'necris-client':
+                                pid = session.get('pid')
+                                if pid:
+                                    subprocess.run(['kill', '-TERM', str(pid)])
+                                    self.logger.info(f"Terminated encrypted SMB session PID: {pid}")
+                    
+                except json.JSONDecodeError:
+                    self.logger.warning("Could not parse smbstatus JSON output, falling back to pkill")
+                    subprocess.run(['pkill', '-SIGTERM', '-u', 'necris-client', 'smbd'])
+            else:
+                # Fallback if smbstatus fails
+                self.logger.warning("smbstatus failed, falling back to pkill")
+                subprocess.run(['pkill', '-SIGTERM', '-u', 'necris-client', 'smbd'])
+            
+            # Additional cleanup
+            subprocess.run(['smbcontrol', 'smbd', 'close-share', '*'])
+            
+            self.logger.info("Successfully terminated all SMB sessions")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error terminating SMB sessions: {e}")
+            return False
+
+    def update_password(self, new_password):
+        """Update password and terminate existing sessions"""
+        try:
+            # First terminate all existing sessions
+            self._terminate_smb_sessions()
+            
+            # Then update Samba password
             if self._update_samba_password(new_password):
-                # Then update credentials file
+                # Update credentials file
                 credentials = self.get_credentials()
                 credentials['password'] = hashlib.sha256(new_password.encode()).hexdigest()
+                credentials['is_default_password'] = False
                 self._save_credentials(credentials)
+                
+                # Store actual password securely
+                password_file = '/etc/necris/smb.secret'
+                with open(password_file, 'w') as f:
+                    f.write(new_password)
+                os.chmod(password_file, 0o600)
+                
+                # Restart Samba services to ensure clean state
+                subprocess.run(['systemctl', 'restart', 'smbd'], check=True)
+                
                 return True
             return False
             

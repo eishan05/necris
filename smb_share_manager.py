@@ -73,28 +73,29 @@ class SMBShareManager:
                 ], check=True)
                 self.logger.info(f"Created system user {self.smb_user}")
 
-            # Set up or update Samba user and password
-            try:
-                # Delete existing Samba user if exists
-                subprocess.run(['smbpasswd', '-x', self.smb_user], 
-                            stderr=subprocess.DEVNULL)
-            except:
-                pass
-
-            # Create new Samba user
-            # First add to smbpasswd file
-            subprocess.run(['smbpasswd', '-a', self.smb_user], 
-                        input=f"necris-is-awesome\nnecris-is-awesome\n".encode(),
-                        check=True)
+            # Check if Samba user exists
+            result = subprocess.run(['pdbedit', '-L'], capture_output=True, text=True)
             
-            # Then enable the user
-            subprocess.run(['smbpasswd', '-e', self.smb_user], check=True)
+            if self.smb_user not in result.stdout:
+                # Get current password from password manager
+                current_password = self.password_manager.get_current_password()
+                
+                # Create new Samba user
+                subprocess.run(['smbpasswd', '-a', self.smb_user], 
+                            input=f"{current_password}\n{current_password}\n".encode(),
+                            check=True)
+                
+                # Enable the user
+                subprocess.run(['smbpasswd', '-e', self.smb_user], check=True)
+                
+                self.logger.info(f"Created and enabled Samba user {self.smb_user}")
             
             self.logger.info(f"Samba user {self.smb_user} setup completed")
             
         except Exception as e:
             self.logger.error(f"Failed to setup Samba user: {e}")
             raise
+
 
     def setup_samba_config(self):
         """Ensure Samba configuration is properly set up"""
@@ -185,6 +186,7 @@ class SMBShareManager:
         except Exception as e:
             self.logger.error(f"Error validating existing shares: {e}")
 
+
     def verify_samba_setup(self):
         """Verify Samba user setup"""
         try:
@@ -197,14 +199,15 @@ class SMBShareManager:
                 self.logger.warning(f"Samba user {self.smb_user} not found, recreating...")
                 self.setup_samba_user()
                 
-            # Test user authentication
+            # Test user authentication with current password
+            current_password = self.password_manager.get_current_password()
             test_auth = subprocess.run(
-                ['smbclient', '-L', 'localhost', '-U', f'{self.smb_user}%necris-is-awesome'],
+                ['smbclient', '-L', 'localhost', '-U', f'{self.smb_user}%{current_password}'],
                 capture_output=True
             )
             
             if test_auth.returncode != 0:
-                self.logger.warning("Samba authentication test failed, resetting password...")
+                self.logger.warning("Samba authentication test failed, resetting user...")
                 self.setup_samba_user()
                 
             self.logger.info("Samba setup verification completed")
@@ -212,6 +215,7 @@ class SMBShareManager:
         except Exception as e:
             self.logger.error(f"Failed to verify Samba setup: {e}")
             raise
+
 
     def update_active_shares(self):
         """Update the set of currently active shares"""
