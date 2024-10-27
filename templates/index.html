@@ -216,6 +216,139 @@
                 flex-direction: column;
             }
         }
+
+        .disk-usage-container {
+            background: #fff;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .disk-usage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .disk-usage-header h2 {
+            margin: 0;
+        }
+
+        .drive-item {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .drive-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .drive-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .drive-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 24px;
+            background: #eee;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: #4CAF50;
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+
+        .progress-bar.warning {
+            background: #FFA500;
+        }
+
+        .progress-bar.critical {
+            background: #FF4444;
+        }
+
+        .drive-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            min-width: 300px;
+        }
+
+        .threshold-inputs {
+            margin: 1.5rem 0;
+        }
+
+        .threshold-input {
+            margin-bottom: 1rem;
+        }
+
+        .threshold-input label {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .threshold-input input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        .settings-button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .settings-button:hover {
+            background: #f5f5f5;
+        }
     </style>
 </head>
 <body>
@@ -322,6 +455,18 @@
         </div>
         {% endif %}
 
+        <div class="disk-usage-container">
+            <div class="disk-usage-header">
+                <h2>Drive Usage</h2>
+                <button onclick="openThresholdSettings()" class="settings-button">
+                    ⚙️ Settings
+                </button>
+            </div>
+            <div id="drives-container">
+                <!-- Drives will be inserted here dynamically -->
+            </div>
+        </div>
+
         <div class="upload-section">
             <h3>Upload Files</h3>
             <form class="upload-form" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
@@ -378,6 +523,26 @@
         </table>
     </div>
 
+    <div id="threshold-modal" class="modal">
+        <div class="modal-content">
+            <h3>Drive Usage Thresholds</h3>
+            <div class="threshold-inputs">
+                <div class="threshold-input">
+                    <label for="warning-threshold">Warning Threshold (%)</label>
+                    <input type="number" id="warning-threshold" min="0" max="100" />
+                </div>
+                <div class="threshold-input">
+                    <label for="critical-threshold">Critical Threshold (%)</label>
+                    <input type="number" id="critical-threshold" min="0" max="100" />
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeThresholdSettings()">Cancel</button>
+                <button onclick="saveThresholds()" class="primary">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function toggleInstructions() {
             const content = document.querySelector('.instructions-content');
@@ -391,6 +556,114 @@
                 icon.style.transform = 'rotate(0)';
             }
         }
+
+        function formatBytes(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let size = bytes;
+            let unitIndex = 0;
+            
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            
+            return `${size.toFixed(1)} ${units[unitIndex]}`;
+        }
+
+        function createDriveElement(drive) {
+            return `
+                <div class="drive-item">
+                    <div class="drive-header">
+                        <span class="drive-name">${drive.name}</span>
+                        <span class="drive-status ${drive.status}">${drive.status}</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar ${drive.status}" 
+                            style="width: ${drive.percent}%"></div>
+                    </div>
+                    <div class="drive-stats">
+                        <span>${drive.percent.toFixed(1)}% used</span>
+                        <span>${formatBytes(drive.free)} free of ${formatBytes(drive.total)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateDiskUsage() {
+            fetch('/api/disk-usage')
+                .then(response => response.json())
+                .then(data => {
+                    const drivesContainer = document.getElementById('drives-container');
+                    
+                    if (data.drives.length === 0) {
+                        drivesContainer.innerHTML = `
+                            <div class="no-drives-message">
+                                No USB drives detected. Please connect a drive to monitor its usage.
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    drivesContainer.innerHTML = data.drives
+                        .map(drive => createDriveElement(drive))
+                        .join('');
+                    
+                    // Check for warnings/critical status
+                    data.drives.forEach(drive => {
+                        if (drive.status === 'critical') {
+                            showNotification(`Critical: Drive "${drive.name}" is almost full!`, 'error');
+                        } else if (drive.status === 'warning') {
+                            showNotification(`Warning: Drive "${drive.name}" is running low on space`, 'warning');
+                        }
+                    });
+                });
+        }
+
+        function showNotification(message, type) {
+            // Implement based on your notification system
+            console.log(`${type}: ${message}`);
+        }
+
+        function openThresholdSettings() {
+            fetch('/api/disk-usage')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('warning-threshold').value = data.thresholds.warning;
+                    document.getElementById('critical-threshold').value = data.thresholds.critical;
+                    document.getElementById('threshold-modal').style.display = 'block';
+                });
+        }
+
+        function closeThresholdSettings() {
+            document.getElementById('threshold-modal').style.display = 'none';
+        }
+
+        function saveThresholds() {
+            const warning = parseInt(document.getElementById('warning-threshold').value);
+            const critical = parseInt(document.getElementById('critical-threshold').value);
+            
+            fetch('/api/disk-thresholds', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ warning, critical })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showNotification(data.error, 'error');
+                } else {
+                    closeThresholdSettings();
+                    updateDiskUsage();
+                    showNotification('Thresholds updated successfully', 'success');
+                }
+            });
+        }
+
+        // Update disk usage every 5 minutes
+        updateDiskUsage();
+        setInterval(updateDiskUsage, 5 * 60 * 1000);
     </script>
 </body>
 </html>

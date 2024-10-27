@@ -3,6 +3,7 @@ import os
 from werkzeug.utils import secure_filename
 from functools import wraps
 from password_manager import PasswordManager
+from disk_monitor import DiskMonitor
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Generate a random secret key for sessions
@@ -17,6 +18,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Initialize password manager
 password_manager = PasswordManager()
+disk_monitor = DiskMonitor(UPLOAD_FOLDER)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -138,6 +140,28 @@ def delete_file(filepath):
     if os.path.exists(full_path):
         os.remove(full_path)
     return redirect(request.referrer)
+
+# Disk usage monitoring. These routes are used by the frontend to get disk usage info.
+@app.route('/api/disk-usage')
+@login_required
+def get_disk_usage():
+    return disk_monitor.get_all_disk_usage()
+
+@app.route('/api/disk-thresholds', methods=['POST'])
+@login_required
+def update_thresholds():
+    data = request.json
+    warning = data.get('warning')
+    critical = data.get('critical')
+    
+    if not all(isinstance(x, int) and 0 <= x <= 100 for x in [warning, critical]):
+        return {'error': 'Invalid threshold values'}, 400
+    if warning >= critical:
+        return {'error': 'Warning threshold must be less than critical threshold'}, 400
+        
+    if disk_monitor.save_thresholds(warning, critical):
+        return {'status': 'success'}
+    return {'error': 'Failed to save thresholds'}, 500
 
 if __name__ == '__main__':
     # Create upload folder if it doesn't exist
