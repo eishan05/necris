@@ -119,6 +119,8 @@ main() {
     
     # Clone/pull latest changes
     if [ ! -d "$INSTALL_DIR/.git" ]; then
+        log_message "Stashing any local changes..."
+        git stash || handle_error "Failed to stash local changes"
         log_message "Performing initial clone..."
         git clone "https://oauth2:${GITHUB_TOKEN}@${REPO_URL#https://}" "$INSTALL_DIR" || handle_error "Failed to clone repository"
         cd "$INSTALL_DIR" || handle_error "Failed to change to install directory"
