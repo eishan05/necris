@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Flag to control service management
+SKIP_SERVICE_MANAGEMENT=${1:-"false"}
+
 # Update package lists
 sudo apt update
 
@@ -41,10 +44,13 @@ EOF
 # Reload systemd daemon
 sudo systemctl daemon-reload
 
-# Enable and start the service
+# Enable and optionally start the service
 sudo systemctl enable necris-nas
-sudo systemctl start necris-nas
 
-# Print status
-echo "Setup complete! Necris NAS server service has been installed and started."
-echo "You can check the status with: sudo systemctl status necris-nas"
+if [ "$SKIP_SERVICE_MANAGEMENT" != "true" ]; then
+    sudo systemctl start necris-nas
+    echo "Necris NAS server service has been installed and started."
+    echo "You can check the status with: sudo systemctl status necris-nas"
+else
+    echo "Necris NAS server service has been installed but not started (SKIP_SERVICE_MANAGEMENT=true)"
+fi
