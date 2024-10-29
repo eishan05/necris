@@ -128,6 +128,8 @@ main() {
         git add . || handle_error "Failed to add local changes"
         log_message "Stashing any local changes..."
         git stash || handle_error "Failed to stash local changes"
+        log_message "Clearing stash..."
+        git stash clear || handle_error "Failed to clear stash"
         log_message "Checking for updates..."
         CURRENT_HASH=$(git rev-parse HEAD)
         git fetch origin || handle_error "Failed to fetch updates"

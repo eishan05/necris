@@ -33,6 +33,7 @@ After=network.target
 
 [Service]
 Type=oneshot
+Environment="HOME=/root"
 ExecStart=/bin/bash $UPDATER_SCRIPT
 StandardOutput=journal
 StandardError=journal
