@@ -123,6 +123,15 @@ class SMBShareManager:
         ntlm auth = yes
         lanman auth = yes
         
+        # Apple device support
+        vfs objects = fruit streams_xattr
+        fruit:metadata = stream
+        fruit:model = MacSamba
+        fruit:posix_rename = yes
+        fruit:veto_appledouble = no
+        fruit:wipe_intentionally_left_blank_rfork = yes
+        fruit:delete_empty_adfiles = yes
+        
         # Logging
         log file = /var/log/samba/log.%m
         max log size = 1000
@@ -156,7 +165,6 @@ class SMBShareManager:
         except Exception as e:
             self.logger.error(f"Failed to setup Samba configuration: {e}")
             raise
-
 
     def validate_existing_shares(self):
         """Check for and clean up stale shares"""
