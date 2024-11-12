@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Necris File Server</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -349,6 +352,44 @@
         .settings-button:hover {
             background: #f5f5f5;
         }
+
+        .header-actions {
+            display: flex;
+            align-items: right;
+            gap: 1rem;
+        }
+
+        .refresh-button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .refresh-button:hover {
+            background: #f5f5f5;
+        }
+
+        .refresh-button:disabled {
+            background-color: #718096;
+            cursor: not-allowed;
+        }
+
+        .flash-messages {
+            margin: 1rem 0;
+        }
+
+        .flash-message {
+            padding: 1rem;
+            border-radius: 0.375rem;
+            background-color: #48bb78;
+            color: white;
+        }
+
+        .flash-message.error {
+            background-color: #f56565;
+        }
     </style>
 </head>
 <body>
@@ -446,6 +487,29 @@
                     </ol>
                 </div>
 
+                <div class="platform-instructions">
+                    <h3>iOS Users</h3>
+                    <ol>
+                        <li>Open the default Files App</li>
+                        <li>Click on three dots on the top right corner</li>
+                        <li>Type: <code>smb://necris.local</code></li>
+                        <li>Click Connect</li>
+                        <li>When prompted, connect as a registered user:</li>
+                            <ul>
+                                <li>Username: necris-client</li>
+                                <li>Password: [your password]</li>
+                            </ul>
+                        </li>
+                        <li>Select the drive you want to access:
+                            <ul>
+                                {% for drive in drives.names %}
+                                <li><code>{{ drive }}</code></li>
+                                {% endfor %}
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+
                 {% if not drives.names %}
                 <div class="warning">
                     No USB drives are currently connected. Connect a USB drive to see it shared here.
@@ -458,9 +522,14 @@
         <div class="disk-usage-container">
             <div class="disk-usage-header">
                 <h2>Drive Usage</h2>
-                <button onclick="openThresholdSettings()" class="settings-button">
-                    ⚙️ Settings
-                </button>
+                <div class="header-actions">
+                    <button onclick="refreshServices()" class="refresh-button">
+                        🔄 Refresh Services
+                    </button>
+                    <button onclick="openThresholdSettings()" class="settings-button">
+                        ⚙️ Settings
+                    </button>
+                </div>
             </div>
             <div id="drives-container">
                 <!-- Drives will be inserted here dynamically -->
@@ -660,6 +729,65 @@
                 }
             });
         }
+
+        async function refreshServices() {
+            const button = document.querySelector('.refresh-button');
+            // Disable button and show loading state
+            button.disabled = true;
+            button.innerHTML = '🔄 Refreshing...';
+            
+            try {
+                const response = await fetch('/api/refresh-services');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Show success message
+                    const flashContainer = document.createElement('div');
+                    flashContainer.className = 'flash-messages';
+                    flashContainer.innerHTML = `
+                        <div class="flash-message">
+                            Services refresh initiated successfully. Note that this is an expensive operation so use it sparingly. You might have to refresh the web page to see the updated state.
+                        </div>
+                    `;
+                    document.querySelector('.container').insertBefore(
+                        flashContainer,
+                        document.querySelector('.breadcrumb')
+                    );
+                    
+                    // Remove message after 5 seconds
+                    setTimeout(() => {
+                        flashContainer.remove();
+                    }, 5000);
+                    
+                    // Reload page after a delay to show updated state
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 6000);
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                // Show error message
+                const flashContainer = document.createElement('div');
+                flashContainer.className = 'flash-messages';
+                flashContainer.innerHTML = `
+                    <div class="flash-message error">
+                        Failed to refresh services: ${error.message}
+                    </div>
+                `;
+                document.querySelector('.container').insertBefore(
+                    flashContainer,
+                    document.querySelector('.breadcrumb')
+                );
+            } finally {
+                // Reset button state after 3 seconds
+                setTimeout(() => {
+                    button.disabled = false;
+                    button.innerHTML = '🔄 Refresh Services';
+                }, 3000);
+            }
+        }
+        
 
         // Update disk usage every 5 minutes
         updateDiskUsage();

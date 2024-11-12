@@ -18,6 +18,10 @@ class ServiceOrchestrator:
             filename='/var/log/file_server_orchestrator.log'
         )
         self.logger = logging.getLogger(__name__)
+
+        # Add signal file check interval (5 seconds)
+        self.signal_check_interval = 5
+        self.signal_file = '/tmp/necris_refresh_services'
         
         # Store process handles
         self.processes = {
@@ -72,6 +76,24 @@ class ServiceOrchestrator:
                 self.logger.error(f"Error stopping {service_name}: {e}")
                 return False
         return True
+    
+    def refresh_handler(self, signum, frame):
+        """Handle refresh signal by restarting USB monitor and SMB share manager"""
+        self.logger.info("Received refresh signal, restarting services...")
+        try:
+            # Restart USB monitor
+            self.stop_service('usb_monitor')
+            time.sleep(2)  # Give it time to clean up
+            self.processes['usb_monitor'] = self.start_service('usb_monitor', 'usb_monitor.py')
+            
+            # Restart SMB share manager
+            self.stop_service('smb_share_manager')
+            time.sleep(2)  # Give it time to clean up
+            self.processes['smb_share_manager'] = self.start_service('smb_share_manager', 'smb_share_manager.py')
+            
+            self.logger.info("Services restart completed")
+        except Exception as e:
+            self.logger.error(f"Error during services refresh: {e}")
             
     def restart_usb_monitor(self):
         """Restart the USB monitor service"""
@@ -93,6 +115,56 @@ class ServiceOrchestrator:
                         f"{service_name.lower()}.py"
                     )
             time.sleep(5)
+
+    def monitor_refresh_signal_file(self):
+        """Monitor for the presence of the signal file. This is sent via the UI"""
+        last_refresh_time = 0
+        
+        while self.should_run.is_set():
+            try:
+                if os.path.exists(self.signal_file):
+                    # Read the timestamp from the file
+                    with open(self.signal_file, 'r') as f:
+                        try:
+                            refresh_time = float(f.read().strip())
+                        except ValueError:
+                            refresh_time = time.time()
+                    
+                    # Only refresh if this is a new signal
+                    if refresh_time > last_refresh_time:
+                        self.logger.info("New refresh signal file found, refreshing services...")
+                        self.refresh_services()
+                        last_refresh_time = refresh_time
+                    
+                    # Remove the signal file
+                    try:
+                        os.remove(self.signal_file)
+                    except OSError:
+                        pass
+                        
+            except Exception as e:
+                self.logger.error(f"Error checking signal file: {e}")
+                
+            time.sleep(self.signal_check_interval)
+
+    def refresh_services(self):
+        """Restart USB monitor and SMB share manager services"""
+        self.logger.info("Refreshing services...")
+        try:
+            # Restart USB monitor
+            self.stop_service('usb_monitor')
+            time.sleep(2)  # Give it time to clean up
+            self.processes['usb_monitor'] = self.start_service('usb_monitor', 'usb_monitor.py')
+            
+            # Restart SMB share manager
+            self.stop_service('smb_share_manager')
+            time.sleep(2)  # Give it time to clean up
+            self.processes['smb_share_manager'] = self.start_service('smb_share_manager', 'smb_share_manager.py')
+            
+            self.logger.info("Services refresh completed")
+        except Exception as e:
+            self.logger.error(f"Error during services refresh: {e}")
+
             
     def periodic_monitor_restart(self):
         """Periodically restart the USB monitor"""
@@ -151,6 +223,13 @@ class ServiceOrchestrator:
                 daemon=True
             )
             restart_thread.start()
+
+            # Start signal file monitoring thread
+            self.signal_monitor_thread = threading.Thread(
+                target=self.monitor_refresh_signal_file,
+                daemon=True
+            )
+            self.signal_monitor_thread.start()
             
             # Keep the main thread alive
             while self.should_run.is_set():

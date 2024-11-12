@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash, session
 import os
+import time
 from werkzeug.utils import secure_filename
 from functools import wraps
 from password_manager import PasswordManager
@@ -162,6 +163,18 @@ def update_thresholds():
     if disk_monitor.save_thresholds(warning, critical):
         return {'status': 'success'}
     return {'error': 'Failed to save thresholds'}, 500
+
+@app.route('/api/refresh-services')
+@login_required
+def refresh_services():
+    try:
+        # Create a refresh signal file
+        signal_file = '/tmp/necris_refresh_services'
+        with open(signal_file, 'w') as f:
+            f.write(str(time.time()))  # Write current timestamp
+        return {'status': 'success', 'message': 'Services refresh initiated'}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}, 500
 
 if __name__ == '__main__':
     # Create upload folder if it doesn't exist
