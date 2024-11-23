@@ -2,7 +2,6 @@
 
 # Configuration
 REPO_URL="https://github.com/eishan05/necris.git"
-GITHUB_TOKEN="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"
 INSTALL_DIR="/home/necris-user/necris"
 BACKUP_DIR="/home/necris-user/necris-backup"
 LOG_FILE="/var/log/necris-nas-update.log"
@@ -60,11 +59,6 @@ setup_git_config() {
     # Configure git to allow root to operate on the repository
     git config --system --add safe.directory "$INSTALL_DIR"
     
-    # Configure git credentials
-    git config --system credential.helper store
-    echo "https://oauth2:${GITHUB_TOKEN}@github.com" > /root/.git-credentials
-    chmod 600 /root/.git-credentials
-    
     # Set git user info for root
     git config --system user.email "root@necris-nas.local"
     git config --system user.name "Necris NAS System"
@@ -112,15 +106,10 @@ main() {
         cp -r "$INSTALL_DIR"/* "$BACKUP_DIR"/ || handle_error "Failed to create backup"
     fi
     
-    # Configure git credentials
-    git config --global credential.helper store
-    echo "https://oauth2:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
-    chmod 600 ~/.git-credentials
-    
     # Clone/pull latest changes
     if [ ! -d "$INSTALL_DIR/.git" ]; then
         log_message "Performing initial clone..."
-        git clone "https://oauth2:${GITHUB_TOKEN}@${REPO_URL#https://}" "$INSTALL_DIR" || handle_error "Failed to clone repository"
+        git clone "$REPO_URL" "$INSTALL_DIR" || handle_error "Failed to clone repository"
         cd "$INSTALL_DIR" || handle_error "Failed to change to install directory"
     else
         cd "$INSTALL_DIR" || handle_error "Failed to change to install directory"
@@ -141,6 +130,8 @@ main() {
             exit 0
         fi
         
+        # Reset any local changes and pull latest
+        git reset --hard HEAD || handle_error "Failed to reset local changes"
         git pull origin main || handle_error "Failed to pull updates"
     fi
     
