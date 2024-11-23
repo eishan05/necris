@@ -124,7 +124,7 @@ main() {
         git fetch origin || handle_error "Failed to fetch updates"
         REMOTE_HASH=$(git rev-parse origin/main)
         
-        if [ "$CURRENT_HASH" = "$REMOTE_HASH" ]; then
+        if [ "$CURRENT_HASH" = "$REMOTE_HASH" ] && [ "$IS_FRESH_INSTALL" -eq 1 ]; then
             log_message "Already up to date"
             cleanup
             exit 0
